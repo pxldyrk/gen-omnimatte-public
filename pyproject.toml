@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genomnimatte"
+version = "0.1.0"
+description = "GenOmnimatte: Generative Omnimatte for video object removal and matting"
+requires-python = ">=3.10"
+
+authors = [
+  { name = "GenOmnimatte Authors" }
+]
+
+# Dependencies are intentionally empty to allow --no-deps installation
+# The parent project manages all dependencies
+dependencies = []
+
+[project.optional-dependencies]
+full = [
+    "Pillow",
+    "einops",
+    "safetensors",
+    "timm",
+    "tomesd",
+    "torch>=2.1.2",
+    "torchdiffeq",
+    "torchsde",
+    "decord",
+    "datasets",
+    "numpy",
+    "scikit-image",
+    "opencv-python",
+    "omegaconf",
+    "SentencePiece",
+    "albumentations",
+    "imageio[ffmpeg]",
+    "imageio[pyav]",
+    "tensorboard",
+    "beautifulsoup4",
+    "ftfy",
+    "func_timeout",
+    "accelerate>=0.25.0",
+    "diffusers>=0.30.1",
+    "transformers>=4.46.2",
+    "loguru",
+    "mediapy",
+    "tqdm",
+    "matplotlib",
+    "ml_collections",
+    "absl-py",
+    "scipy",
+    "kornia",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["genomnimatte*", "omnimatte*", "videox_fun*", "config*", "inference*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.py", "*.json"]
