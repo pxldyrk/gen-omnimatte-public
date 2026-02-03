@@ -775,6 +775,8 @@ class CogVideoXFunInpaintPipeline(DiffusionPipeline):
         skip_unet: bool = False,
         use_vae_mask: bool = False,
         stack_mask: bool = False,
+        pre_denoising_callback: Optional[Callable] = None,
+        post_denoising_callback: Optional[Callable] = None,
     ) -> Union[CogVideoXFunPipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
@@ -1015,6 +1017,7 @@ class CogVideoXFunInpaintPipeline(DiffusionPipeline):
                     )
                     if not use_vae_mask and not stack_mask:
                         mask_latents = resize_mask(1 - mask_condition, masked_video_latents)
+                        logger.debug(f'[DEBUG] mask_latents created: shape={mask_latents.shape}, min={mask_latents.min().item():.4f}, max={mask_latents.max().item():.4f}, unique_approx={len(torch.unique(mask_latents.flatten()[:1000]))}')
                         if binarize_mask:
                             if use_trimask:
                                 mask_latents = torch.where(mask_latents > 0.75, 1., mask_latents)
@@ -1085,6 +1088,10 @@ class CogVideoXFunInpaintPipeline(DiffusionPipeline):
         if comfyui_progressbar:
             pbar.update(1)
 
+        # Pre-denoising callback (e.g. move transformer to GPU for hybrid_offload)
+        if pre_denoising_callback is not None:
+            pre_denoising_callback(self)
+
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
         logger.debug(f'Pipeline mask {mask_condition.shape} {mask_condition.dtype} {mask_condition.min()} {mask_condition.max()}')
@@ -1119,6 +1126,13 @@ class CogVideoXFunInpaintPipeline(DiffusionPipeline):
             for i, t in enumerate(timesteps):
                 if self.interrupt:
                     continue
+
+                # One-time debug print on first iteration
+                if i == 0:
+                    logger.debug(f'[DEBUG] Denoising loop start: inpaint_latents is {"NOT None" if inpaint_latents is not None else "None"}')
+                    if inpaint_latents is not None:
+                        logger.debug(f'[DEBUG] inpaint_latents: shape={inpaint_latents.shape}, min={inpaint_latents.min().item():.4f}, max={inpaint_latents.max().item():.4f}, dtype={inpaint_latents.dtype}')
+                        logger.debug(f'[DEBUG] inpaint_latents will be passed to transformer (line ~1145)')
 
                 def _sample(_latents, _inpaint_latents):
                     # 7. Create rotary embeds if required
@@ -1226,6 +1240,10 @@ class CogVideoXFunInpaintPipeline(DiffusionPipeline):
                     progress_bar.update()
                 if comfyui_progressbar:
                     pbar.update(1)
+
+        # Post-denoising callback (e.g. move transformer to CPU for hybrid_offload)
+        if post_denoising_callback is not None:
+            post_denoising_callback(self)
 
         if output_type == "numpy":
             video = self.decode_latents(latents)

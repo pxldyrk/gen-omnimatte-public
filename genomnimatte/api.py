@@ -267,6 +267,8 @@ class CasperModel:
         guidance_scale: Optional[float] = None,
         denoise_strength: Optional[float] = None,
         keep_fg_ids: List[int] = [-1],
+        pre_denoising_callback=None,
+        post_denoising_callback=None,
     ) -> InferenceResult:
         """
         Run video inpainting.
@@ -287,6 +289,16 @@ class CasperModel:
         Returns:
             InferenceResult with output path and optional tensors
         """
+        # DEBUG: Log mask reception
+        logger.debug(f"[DEBUG] CasperModel.run() mask received: {mask is not None}")
+        if mask is not None:
+            if isinstance(mask, str):
+                logger.debug(f"[DEBUG] mask is path: {mask}")
+            else:
+                mask_arr = mask.numpy() if isinstance(mask, torch.Tensor) else mask
+                logger.debug(f"[DEBUG] mask shape: {mask_arr.shape}, dtype: {mask_arr.dtype}")
+                logger.debug(f"[DEBUG] mask min: {mask_arr.min():.4f}, max: {mask_arr.max():.4f}")
+
         if self._pipeline is None:
             self.load()
 
@@ -347,6 +359,21 @@ class CasperModel:
             input_video = video if isinstance(video, torch.Tensor) else torch.from_numpy(video)
             input_mask = mask if isinstance(mask, torch.Tensor) else torch.from_numpy(mask)
 
+            # Preprocess tensor mask to match file-based mask processing from get_video_mask_input()
+            # 1. Normalize to [0, 1] range if in [0, 255] range
+            if input_mask.max() > 1.0:
+                input_mask = input_mask / 255.0
+
+            # 2. Apply inversion for trimask mode (equivalent to 255 - mask before normalization)
+            if self._config.video_model.use_trimask:
+                input_mask = 1.0 - input_mask
+
+        # DEBUG: Log input_mask before pipeline call
+        logger.debug(f"[DEBUG] input_mask passed to pipeline: {input_mask is not None}")
+        if input_mask is not None:
+            logger.debug(f"[DEBUG] input_mask shape: {input_mask.shape}, dtype: {input_mask.dtype}")
+            logger.debug(f"[DEBUG] input_mask min: {input_mask.min().item():.4f}, max: {input_mask.max().item():.4f}")
+
         # Run inference
         with torch.no_grad():
             sample = self._pipeline(
@@ -366,6 +393,8 @@ class CasperModel:
                 skip_unet=self._config.experiment.skip_unet,
                 use_vae_mask=self._config.video_model.use_vae_mask,
                 stack_mask=self._config.video_model.stack_mask,
+                pre_denoising_callback=pre_denoising_callback,
+                post_denoising_callback=post_denoising_callback,
             ).videos
 
         # Save output
